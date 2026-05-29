@@ -12,10 +12,32 @@ export type ConnectionStatus =
 
 const WS_URL = import.meta.env.VITE_WS_URL ?? "ws://localhost:8080";
 
-// #caller tab = impolite peer (creates offer)
-// no hash    = polite peer (sends "ready", waits for offer)clear
+// ── Room & role logic ─────────────────────────────────────────────────────
+// If ?room= is absent, this user originated the call → generate an ID and
+// become the caller (impolite peer).
+// If ?room= is present, this user joined via an invite link → become the
+// receiver (polite peer).
+//
+// We read + write the URL once at module load so it stays stable across
+// React re-renders.
 
-const isCaller = window.location.hash === "#caller";
+function initRoom(): { roomId: string; isCaller: boolean } {
+  const params = new URLSearchParams(window.location.search);
+  const existing = params.get("room");
+
+  if (existing) {
+    // Joined via invite link → polite / receiver
+    return { roomId: existing, isCaller: false };
+  }
+
+  // First open → generate room ID, update the address bar, become caller
+  const generated = Math.random().toString(36).slice(2, 9); // e.g. "k3f9x2a"
+  const newUrl = `${window.location.pathname}?room=${generated}`;
+  window.history.replaceState(null, "", newUrl);
+  return { roomId: generated, isCaller: true };
+}
+
+const { roomId: ROOM_ID, isCaller: IS_CALLER } = initRoom();
 
 export function useVideoCall() {
   const localVideoRef  = useRef<HTMLVideoElement>(null);
@@ -27,10 +49,12 @@ export function useVideoCall() {
   const [callEnded,  setCallEnded]  = useState(false);
   const [mediaError, setMediaError] = useState<string | null>(null);
 
+  // Expose room ID so VideoCall.tsx can render the invite link
+  const roomId = ROOM_ID;
+
   const signalingRef = useRef<SignalingService | null>(null);
   const peerRef      = useRef<PeerService | null>(null);
   const streamRef    = useRef<MediaStream | null>(null);
-  // Save the remote stream so we can re-attach if the video element remounts
   const remoteStreamRef = useRef<MediaStream | null>(null);
 
   // ── Attach helpers ────────────────────────────────────────────────────────
@@ -87,26 +111,27 @@ export function useVideoCall() {
       if (cancelled) { stream.getTracks().forEach((t) => t.stop()); return; }
 
       streamRef.current = stream;
-      attachLocalVideo(stream);          // show local preview immediately
+      attachLocalVideo(stream);
 
-      // 2. Create signaling service
-      const signaling = new SignalingService(WS_URL);
+      // 2. Create signaling service — append room ID to WS path
+      //    The backend already uses the URL path as the room ID.
+      const signaling = new SignalingService(`${WS_URL}/${roomId}`);
       signalingRef.current = signaling;
 
-      // 3. Create peer (polite = NOT caller, i.e. the receiver)
-      const peer = new PeerService(signaling, !isCaller, {
+      // 3. Create peer  (polite = NOT caller, i.e. the receiver)
+      const peer = new PeerService(signaling, !IS_CALLER, {
         onRemoteStream: attachRemoteStream,
         onConnectionStateChange: handleConnectionStateChange,
       });
       peerRef.current = peer;
-      peer.addTracks(stream);            // must be added before offer is created
+      peer.addTracks(stream);
 
       // 4. React to socket open
       signaling.onStatus((open) => {
         console.log("[Hook] Socket open:", open);
         if (open) {
           setConnectionStatus("waiting");
-          if (!isCaller) {
+          if (!IS_CALLER) {
             // Receiver tells caller "I'm ready — send your offer"
             console.log("[Hook] Receiver: sending ready signal");
             signaling.send({ type: "ready" });
@@ -134,7 +159,7 @@ export function useVideoCall() {
     };
   }, [callEnded]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Ref callbacks (handle React remounting video elements) ───────────────
+  // ── Ref callbacks ─────────────────────────────────────────────────────────
   const localVideoRefCallback = useCallback((el: HTMLVideoElement | null) => {
     (localVideoRef as React.MutableRefObject<HTMLVideoElement | null>).current = el;
     if (el && streamRef.current) attachLocalVideo(streamRef.current);
@@ -142,7 +167,6 @@ export function useVideoCall() {
 
   const remoteVideoRefCallback = useCallback((el: HTMLVideoElement | null) => {
     (remoteVideoRef as React.MutableRefObject<HTMLVideoElement | null>).current = el;
-    // Re-attach already-received remote stream if element remounts
     if (el && remoteStreamRef.current) attachRemoteStream(remoteStreamRef.current);
   }, [attachRemoteStream]);
 
@@ -180,6 +204,7 @@ export function useVideoCall() {
     cameraOn,
     callEnded,
     mediaError,
+    roomId,
     toggleMic,
     toggleCamera,
     endCall,

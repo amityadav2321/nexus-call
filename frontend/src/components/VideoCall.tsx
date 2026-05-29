@@ -1,4 +1,5 @@
-import { Mic, MicOff, PhoneOff, Video, VideoOff } from "lucide-react";
+import { Mic, MicOff, PhoneOff, Video, VideoOff, Link, Check } from "lucide-react";
+import { useState } from "react";
 import { useVideoCall } from "../hooks/useVideoCall";
 import { MicWave } from "./MicWave";
 import { StatusBadge } from "./StatusBadge";
@@ -14,10 +15,26 @@ export function VideoCall() {
     cameraOn,
     callEnded,
     mediaError,
+    roomId,
     toggleMic,
     toggleCamera,
     endCall,
   } = useVideoCall();
+
+  const [copied, setCopied] = useState(false);
+
+  const inviteLink = `${window.location.origin}${window.location.pathname}?room=${roomId}`;
+
+  const copyInviteLink = async () => {
+    try {
+      await navigator.clipboard.writeText(inviteLink);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Fallback for browsers that block clipboard without HTTPS
+      window.prompt("Copy invite link:", inviteLink);
+    }
+  };
 
   // ── Call ended ────────────────────────────────────────────────────────────
   if (callEnded) {
@@ -67,15 +84,31 @@ export function VideoCall() {
       <header className="flex-shrink-0 px-5 py-3 flex items-center justify-between border-b border-white/5 bg-[#080c12]/80 backdrop-blur-sm">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl overflow-hidden shadow-lg shadow-violet-900/40">
-          <img
-            src="/callnix.png"
-            alt="Callnix"
-            className="w-full h-full object-cover"
-          />
-        </div>
+            <img
+              src="/callnix.png"
+              alt="Callnix"
+              className="w-full h-full object-cover"
+            />
+          </div>
           <span className="font-semibold tracking-tight text-white/90">Callnix - Connect Instantly</span>
         </div>
-        <StatusBadge status={connectionStatus} />
+
+        <div className="flex items-center gap-3">
+          {/* Copy Invite Link — only shown while waiting or connected */}
+          {(connectionStatus === "waiting" || connectionStatus === "connecting" || connectionStatus === "connected") && (
+            <button
+              onClick={copyInviteLink}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 transition-colors text-xs font-medium border border-white/10"
+              title={inviteLink}
+            >
+              {copied
+                ? <><Check size={13} className="text-green-400" /><span className="text-green-400">Copied!</span></>
+                : <><Link size={13} className="text-white/70" /><span className="text-white/70">Copy Invite Link</span></>
+              }
+            </button>
+          )}
+          <StatusBadge status={connectionStatus} />
+        </div>
       </header>
 
       {/* Video area */}
