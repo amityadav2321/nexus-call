@@ -66,10 +66,14 @@ export function VideoCall() {
       {/* Header */}
       <header className="flex-shrink-0 px-5 py-3 flex items-center justify-between border-b border-white/5 bg-[#080c12]/80 backdrop-blur-sm">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center shadow-lg shadow-indigo-900/50">
-            <Video size={16} className="text-white" />
-          </div>
-          <span className="font-semibold tracking-tight text-white/90">Nexus Call</span>
+          <div className="w-10 h-10 rounded-xl overflow-hidden shadow-lg shadow-violet-900/40">
+          <img
+            src="/callnix.png"
+            alt="Callnix"
+            className="w-full h-full object-cover"
+          />
+        </div>
+          <span className="font-semibold tracking-tight text-white/90">Callnix - Connect Instantly</span>
         </div>
         <StatusBadge status={connectionStatus} />
       </header>
